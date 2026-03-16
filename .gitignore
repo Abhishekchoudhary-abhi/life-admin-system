@@ -1,0 +1,16 @@
+# secrets
+.env
+.env.*
+token.pickle
+token.json
+credentials.json
+
+# python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+
+# OS
+.DS_Store
+Thumbs.db
