@@ -28,6 +28,17 @@ class TimetableCreate(BaseModel):
     end_time: str
     room: Optional[str] = None
 
+class TimetableSlotResponse(BaseModel):
+    id: str
+    subject_id: str
+    day: str
+    start_time: str
+    end_time: str
+    room: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
 class MarkCreate(BaseModel):
     subject_id: uuid.UUID
     category: str
@@ -71,7 +82,18 @@ async def decrease_attendance(payload: AttendanceDecrease, db: AsyncSession = De
 # --- Timetable Endpoints ---
 @router.get("/timetable")
 async def read_timetable(db: AsyncSession = Depends(get_db)):
-    return await crud.get_timetable(db)
+    slots = await crud.get_timetable(db)
+    return [
+        {
+            "id": str(slot.id),
+            "subject_id": str(slot.subject_id),
+            "day": slot.day,
+            "start_time": slot.start_time,
+            "end_time": slot.end_time,
+            "room": slot.room,
+        }
+        for slot in slots
+    ]
 
 @router.post("/timetable")
 async def create_timetable_slot(payload: TimetableCreate, db: AsyncSession = Depends(get_db)):

@@ -7,19 +7,23 @@ import {
   TimelineNode,
   AttendanceState,
   AttendanceStats,
-  generateTimelineNodes,
+  generateTimelineNodesFromTimetable,
+  getTodaySchedule,
   calculateAttendanceStats,
   getNextState,
   getStateColors,
   getStateIcon,
   formatTimelineDate,
   formatDayShort,
+  TimetableSlot,
 } from "@/lib/AttendanceUtils";
 
 interface AttendanceTimelineProps {
   currentTotal: number;
   currentAttended: number;
   subjectName: string;
+  subjectId: string;
+  timetableSlots: TimetableSlot[];
   onUpdatePredictions?: (nodes: TimelineNode[]) => void;
 }
 
@@ -27,10 +31,13 @@ export default function AttendanceTimeline({
   currentTotal,
   currentAttended,
   subjectName,
+  subjectId,
+  timetableSlots,
   onUpdatePredictions,
 }: AttendanceTimelineProps) {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [nodes, setNodes] = useState<TimelineNode[]>([]);
+  const [todaySchedule, setTodaySchedule] = useState<TimetableSlot[]>([]);
   const [stats, setStats] = useState<AttendanceStats>({
     totalClasses: currentTotal,
     attendedClasses: currentAttended,
@@ -40,14 +47,26 @@ export default function AttendanceTimeline({
   });
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-  // Generate timeline on mount
+  // End date for prediction
+  const today = new Date();
+  const defaultEndDate = new Date();
+  defaultEndDate.setDate(defaultEndDate.getDate() + 30);
+  const [endDate, setEndDate] = useState<string>(
+    defaultEndDate.toISOString().split("T")[0]
+  );
+
+  // Generate timeline on mount or when subject/timetable/endDate changes
   useEffect(() => {
-    const generatedNodes = generateTimelineNodes({
-      numDays: 30,
-      includedDays: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
-      includeSundays: false,
-    });
+    const generatedNodes = generateTimelineNodesFromTimetable(
+      timetableSlots,
+      subjectId,
+      new Date(endDate)
+    );
     setNodes(generatedNodes);
+
+    // Get today's schedule
+    const todayClasses = getTodaySchedule(timetableSlots, subjectId);
+    setTodaySchedule(todayClasses);
 
     // Calculate stats
     const calculatedStats = calculateAttendanceStats(
@@ -56,7 +75,7 @@ export default function AttendanceTimeline({
       generatedNodes
     );
     setStats(calculatedStats);
-  }, [currentTotal, currentAttended]);
+  }, [currentTotal, currentAttended, subjectId, timetableSlots, endDate]);
 
   // Handle node state toggle
   const handleNodeClick = (index: number) => {
@@ -172,6 +191,65 @@ export default function AttendanceTimeline({
             {percentageChange !== 0 ? (percentageChange > 0 ? "Improvement" : "Decline") : "No change"}
           </div>
         </motion.div>
+      </div>
+
+      {/* Today's Schedule */}
+      {todaySchedule.length > 0 && (
+        <div className="bg-gradient-to-r from-brand-blue/5 to-brand-purple/5 rounded-[28px] p-6 border-2 border-brand-blue/20">
+          <div className="text-[10px] font-bold text-brand-blue uppercase tracking-widest mb-4">
+            📅 Today's Classes
+          </div>
+          <div className="space-y-3">
+            {todaySchedule.map((classItem, idx) => (
+              <div key={idx} className="flex items-center justify-between bg-white rounded-xl p-3 border border-brand-blue/10">
+                <div>
+                  <p className="text-sm font-black text-brand-textMain">{classItem.start_time} - {classItem.end_time}</p>
+                  <p className="text-[9px] text-gray-500 font-bold">{classItem.room || "Room TBA"}</p>
+                </div>
+                <div className="text-right">
+                  <div className="w-8 h-8 rounded-full bg-brand-blue/10 flex items-center justify-center text-brand-blue font-black">
+                    ✓
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Prediction Date Range */}
+      <div className="bg-brand-blue/5 rounded-[28px] p-6 border-2 border-brand-blue/20">
+        <div className="text-[10px] font-bold text-brand-blue uppercase tracking-widest mb-4">
+          📅 Prediction Period
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="flex-1">
+            <label className="text-[9px] font-bold text-gray-500 uppercase tracking-widest block mb-2">
+              From
+            </label>
+            <div className="text-sm font-black text-brand-textMain">
+              {today.toLocaleDateString("en-US", {
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+              })}
+            </div>
+          </div>
+          <div className="text-gray-400 text-xl">→</div>
+          <div className="flex-1">
+            <label htmlFor="endDate" className="text-[9px] font-bold text-gray-500 uppercase tracking-widest block mb-2">
+              To
+            </label>
+            <input
+              id="endDate"
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              min={today.toISOString().split("T")[0]}
+              className="w-full px-4 py-2 rounded-xl border-2 border-brand-blue/30 focus:border-brand-blue bg-white text-sm font-bold text-brand-textMain outline-none transition-all"
+            />
+          </div>
+        </div>
       </div>
 
       {/* Timeline */}

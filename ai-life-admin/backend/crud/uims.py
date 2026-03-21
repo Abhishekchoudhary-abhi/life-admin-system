@@ -1,6 +1,6 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
-from sqlalchemy import delete, update
+from sqlalchemy import delete, update, case
 from backend.models.uims import Subject, TimetableSlot, Mark, AttendancePrediction
 from typing import List
 import uuid
@@ -50,7 +50,18 @@ async def delete_subject(db: AsyncSession, subject_id: uuid.UUID):
 
 # --- Timetable ---
 async def get_timetable(db: AsyncSession) -> List[TimetableSlot]:
-    result = await db.execute(select(TimetableSlot).order_by(TimetableSlot.day, TimetableSlot.start_time))
+    # Order by day of week (Monday=1, Tuesday=2, etc.) and then by start_time
+    day_order = case(
+        (TimetableSlot.day == "Monday", 1),
+        (TimetableSlot.day == "Tuesday", 2),
+        (TimetableSlot.day == "Wednesday", 3),
+        (TimetableSlot.day == "Thursday", 4),
+        (TimetableSlot.day == "Friday", 5),
+        (TimetableSlot.day == "Saturday", 6),
+        (TimetableSlot.day == "Sunday", 7),
+        else_=8
+    )
+    result = await db.execute(select(TimetableSlot).order_by(day_order, TimetableSlot.start_time))
     return result.scalars().all()
 
 async def add_timetable_slot(db: AsyncSession, subject_id: uuid.UUID, day: str, start: str, end: str, room: str = None):

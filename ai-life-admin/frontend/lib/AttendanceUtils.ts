@@ -30,9 +30,17 @@ export const getNextState = (currentState: AttendanceState): AttendanceState => 
   return cycle[(currentIndex + 1) % cycle.length];
 };
 
+export interface TimetableSlot {
+  id: string;
+  subject_id: string;
+  day: string;
+  start_time: string;
+  end_time: string;
+  room?: string;
+}
+
 /**
- * Generate timeline nodes for future days
- * Automatically includes timetable days
+ * Options for generating generic timeline nodes
  */
 export interface GenerateTimelineOptions {
   startDate?: Date;
@@ -41,6 +49,9 @@ export interface GenerateTimelineOptions {
   includeSundays?: boolean;
 }
 
+/**
+ * Generate generic timeline nodes with optional filtering
+ */
 export const generateTimelineNodes = (
   options: GenerateTimelineOptions = {}
 ): TimelineNode[] => {
@@ -89,6 +100,113 @@ export const generateTimelineNodes = (
   }
 
   return nodes;
+};
+
+/**
+ * Generate timeline nodes based on actual timetable slots up to end date
+ */
+export const generateTimelineNodesFromTimetable = (
+  timetableSlots: TimetableSlot[],
+  subjectId: string,
+  endDate: Date
+): TimelineNode[] => {
+  // Filter slots for this subject
+  const subjectSlots = timetableSlots.filter(slot => slot.subject_id === subjectId);
+  
+  if (subjectSlots.length === 0) {
+    // Fallback to generic timeline if no timetable
+    const numDays = Math.ceil((endDate.getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+    return generateTimelineNodes({ numDays });
+  }
+
+  const nodes: TimelineNode[] = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const endDateNormalized = new Date(endDate);
+  endDateNormalized.setHours(0, 0, 0, 0);
+
+  // Correct dayMap: JS getDay() (0=Sunday) to day names
+  const dayNames = {
+    0: "Sunday",
+    1: "Monday",
+    2: "Tuesday",
+    3: "Wednesday",
+    4: "Thursday",
+    5: "Friday",
+    6: "Saturday",
+  };
+
+  // Generate dates for future classes based on timetable, up to endDate
+  let currentDate = new Date(today);
+  while (currentDate <= endDateNormalized) {
+    const dayIndex = currentDate.getDay();
+    const checkDayName = dayNames[dayIndex as keyof typeof dayNames];
+
+    // Check if any timetable slot matches this day
+    let daySlots = subjectSlots.filter(slot => slot.day === checkDayName);
+
+    if (daySlots.length > 0) {
+      // Sort slots by start_time using numeric comparison
+      daySlots = daySlots.sort((a, b) => {
+        return timeToMinutes(a.start_time) - timeToMinutes(b.start_time);
+      });
+
+      daySlots.forEach((slot, slotIndex) => {
+        nodes.push({
+          id: `${currentDate.toISOString()}-slot-${slotIndex}`,
+          date: new Date(currentDate),
+          dayOfWeek: checkDayName || "Unknown",
+          state: "present",
+          isToday: currentDate.getTime() === today.getTime(),
+        });
+      });
+    }
+
+    // Move to next day
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+
+  return nodes;
+};
+
+/**
+ * Convert time string to minutes for proper comparison
+ */
+const timeToMinutes = (timeStr: string): number => {
+  if (!timeStr) return 0;
+  const parts = timeStr.trim().split(":");
+  const hours = parseInt(parts[0] || "0", 10);
+  const minutes = parseInt(parts[1] || "0", 10);
+  return hours * 60 + minutes;
+};
+
+/**
+ * Get today's schedule from timetable, sorted by time
+ */
+export const getTodaySchedule = (timetableSlots: TimetableSlot[], subjectId: string): TimetableSlot[] => {
+  // JavaScript getDay(): 0=Sunday, 1=Monday, 2=Tuesday, ..., 6=Saturday
+  const dayMap = {
+    0: "Sunday",
+    1: "Monday",
+    2: "Tuesday",
+    3: "Wednesday",
+    4: "Thursday",
+    5: "Friday",
+    6: "Saturday",
+  };
+
+  const today = new Date();
+  const todayDayName = dayMap[today.getDay() as keyof typeof dayMap];
+
+  const todaySlots = timetableSlots.filter((slot) => {
+    return slot.subject_id === subjectId && slot.day === todayDayName;
+  });
+
+  // Sort by start_time
+  return todaySlots.sort((a, b) => {
+    return timeToMinutes(a.start_time) - timeToMinutes(b.start_time);
+  });
 };
 
 /**

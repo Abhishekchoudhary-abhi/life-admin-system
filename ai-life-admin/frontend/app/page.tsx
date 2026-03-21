@@ -865,6 +865,8 @@ export default function Dashboard() {
                                                 currentTotal={selectedSubject.total_classes || 0}
                                                 currentAttended={selectedSubject.attended_classes || 0}
                                                 subjectName={selectedSubject.name || ""}
+                                                subjectId={selectedSubject.id}
+                                                timetableSlots={timetable}
                                             />
                                         ) : null;
                                     })()}
