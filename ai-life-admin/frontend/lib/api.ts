@@ -212,3 +212,4 @@ export const deletePrediction = async (prediction_id: string): Promise<void> => 
 
 export const clearPredictions = async (subject_id: string): Promise<void> => {
     await api.delete(`/uims/predictions/clear/${subject_id}`);
+};
