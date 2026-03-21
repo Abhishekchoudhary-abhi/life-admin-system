@@ -68,6 +68,7 @@ import UIMSAddModal from "@/components/UIMSAddModal";
 import MorningBriefingPanel from "@/components/MorningBriefingPanel";
 import ProductivityInsight from "@/components/ProductivityInsight";
 import ProductivityChart from "@/components/ProductivityChart";
+import AttendanceTimeline from "@/components/AttendanceTimeline";
 import { cn } from "@/lib/utils";
 import { generateAISchedule } from "@/lib/api";
 
@@ -806,7 +807,7 @@ export default function Dashboard() {
                      <div className="flex items-center justify-between">
                         <div>
                             <h3 className="text-sm font-black text-brand-textMain uppercase tracking-widest">Attendance Predictions</h3>
-                            <p className="text-[10px] text-gray-400 font-bold">AI-powered predictions based on timetable and attendance patterns</p>
+                            <p className="text-[10px] text-gray-400 font-bold">Interactive timeline to plan and visualize future attendance</p>
                         </div>
                         {subjects.length > 0 && (
                             <button 
@@ -827,76 +828,83 @@ export default function Dashboard() {
                             <p className="text-[10px] text-gray-300">Add subjects and timetable to generate predictions</p>
                         </div>
                      ) : (
-                        <div className="space-y-6">
-                            {subjects.map(subject => {
-                                const subjectPredictions = predictions.filter(p => p.subject_id === subject.id);
-                                const attendance_percentage = subject.total_classes > 0 
-                                    ? (subject.attended_classes / subject.total_classes) * 100 
-                                    : 0;
-                                
-                                return (
-                                    <div key={subject.id} className="card-polish rounded-[32px] p-8 bg-white space-y-4">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <h4 className="text-lg font-black text-brand-textMain">{subject.name}</h4>
-                                                <p className="text-[10px] text-gray-400 font-bold">By {subject.faculty || "Prof"}</p>
+                        <div className="space-y-8">
+                            {/* Traditional Card View */}
+                            <div className="space-y-6">
+                                <div className="px-2">
+                                    <h4 className="text-sm font-black text-brand-textMain uppercase tracking-widest">All Subjects Predictions</h4>
+                                    <p className="text-[9px] text-gray-400 font-bold">Detailed breakdown for each subject</p>
+                                </div>
+
+                                {subjects.map(subject => {
+                                    const subjectPredictions = predictions.filter(p => p.subject_id === subject.id);
+                                    const attendance_percentage = subject.total_classes > 0 
+                                        ? (subject.attended_classes / subject.total_classes) * 100 
+                                        : 0;
+                                    
+                                    return (
+                                        <div key={subject.id} className="card-polish rounded-[32px] p-8 bg-white space-y-4">
+                                            <div className="flex justify-between items-start">
+                                                <div>
+                                                    <h4 className="text-lg font-black text-brand-textMain">{subject.name}</h4>
+                                                    <p className="text-[10px] text-gray-400 font-bold">By {subject.faculty || "Prof"}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-[10px] font-bold text-gray-400 uppercase">Current Attendance</p>
+                                                    <p className="text-sm font-black text-brand-blue">{Math.round(attendance_percentage)}%</p>
+                                                </div>
                                             </div>
-                                            <div className="text-right">
-                                                <p className="text-[10px] font-bold text-gray-400 uppercase">Current Attendance</p>
-                                                <p className="text-sm font-black text-brand-blue">{Math.round(attendance_percentage)}%</p>
-                                            </div>
+
+                                            {subjectPredictions.length === 0 ? (
+                                                <div className="border border-dashed border-gray-200 rounded-2xl py-8 text-center">
+                                                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No predictions generated</p>
+                                                    <button 
+                                                        onClick={() => handleGeneratePredictions(subject.id)}
+                                                        className="mt-3 text-[9px] font-black text-brand-blue hover:text-brand-blue/70 uppercase"
+                                                    >
+                                                        Generate for this subject →
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                    {subjectPredictions.slice(0, 9).map(pred => {
+                                                        const statusColors = {
+                                                            present: "bg-emerald-50 text-emerald-600 border-emerald-100",
+                                                            absent: "bg-rose-50 text-rose-600 border-rose-100",
+                                                            leave: "bg-amber-50 text-amber-600 border-amber-100"
+                                                        };
+                                                        const statusIcons = {
+                                                            present: "✓",
+                                                            absent: "✕",
+                                                            leave: "△"
+                                                        };
+
+                                                        return (
+                                                            <div key={pred.id} className={`rounded-2xl p-4 border-2 ${statusColors[pred.status as keyof typeof statusColors]} group cursor-pointer hover:scale-105 transition-transform`}>
+                                                                <div className="text-[10px] font-black uppercase tracking-tight mb-2 opacity-70">
+                                                                    {new Date(pred.predicted_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                                                </div>
+                                                                <div className="text-[11px] font-bold mb-2">
+                                                                    {pred.start_time} - {pred.end_time}
+                                                                </div>
+                                                                <div className="flex items-center justify-between">
+                                                                    <span className="text-[10px] font-black uppercase">{pred.status}</span>
+                                                                    <span className="text-lg font-black">{statusIcons[pred.status as keyof typeof statusIcons]}</span>
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+
+                                            {subjectPredictions.length > 9 && (
+                                                <div className="text-center">
+                                                    <p className="text-[10px] font-bold text-gray-400 uppercase">
+                                                        +{subjectPredictions.length - 9} more predictions
+                                                    </p>
+                                                </div>
+                                            )}
                                         </div>
-
-                                        {subjectPredictions.length === 0 ? (
-                                            <div className="border border-dashed border-gray-200 rounded-2xl py-8 text-center">
-                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No predictions generated</p>
-                                                <button 
-                                                    onClick={() => handleGeneratePredictions(subject.id)}
-                                                    className="mt-3 text-[9px] font-black text-brand-blue hover:text-brand-blue/70 uppercase"
-                                                >
-                                                    Generate for this subject →
-                                                </button>
-                                            </div>
-                                        ) : (
-                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                                {subjectPredictions.slice(0, 9).map(pred => {
-                                                    const statusColors = {
-                                                        present: "bg-emerald-50 text-emerald-600 border-emerald-100",
-                                                        absent: "bg-rose-50 text-rose-600 border-rose-100",
-                                                        leave: "bg-amber-50 text-amber-600 border-amber-100"
-                                                    };
-                                                    const statusIcons = {
-                                                        present: "✓",
-                                                        absent: "✕",
-                                                        leave: "△"
-                                                    };
-
-                                                    return (
-                                                        <div key={pred.id} className={`rounded-2xl p-4 border-2 ${statusColors[pred.status as keyof typeof statusColors]} group cursor-pointer hover:scale-105 transition-transform`}>
-                                                            <div className="text-[10px] font-black uppercase tracking-tight mb-2 opacity-70">
-                                                                {new Date(pred.predicted_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
-                                                            </div>
-                                                            <div className="text-[11px] font-bold mb-2">
-                                                                {pred.start_time} - {pred.end_time}
-                                                            </div>
-                                                            <div className="flex items-center justify-between">
-                                                                <span className="text-[10px] font-black uppercase">{pred.status}</span>
-                                                                <span className="text-lg font-black">{statusIcons[pred.status as keyof typeof statusIcons]}</span>
-                                                            </div>
-                                                        </div>
-                                                    );
-                                                })}
-                                            </div>
-                                        )}
-
-                                        {subjectPredictions.length > 9 && (
-                                            <div className="text-center">
-                                                <p className="text-[10px] font-bold text-gray-400 uppercase">
-                                                    +{subjectPredictions.length - 9} more predictions
-                                                </p>
-                                            </div>
-                                        )}
-                                    </div>
                                 );
                             })}
                         </div>
