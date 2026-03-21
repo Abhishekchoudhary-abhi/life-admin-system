@@ -2,6 +2,8 @@ import os
 import sys
 import requests
 from datetime import datetime, timezone
+from backend.core.database import SessionLocal
+from backend.models.task import Task
 
 def send_telegram(message: str):
     """Send a Telegram notification."""
@@ -85,23 +87,30 @@ def check_new_emails():
 
         # Create tasks from action items
         tasks_created = 0
-        for action in all_action_items:
-            try:
-                resp = requests.post(
-                    "http://localhost:8000/tasks/",
-                    json={
-                        "title":    action["title"],
-                        "priority": action["priority"],
-                        "deadline": action["deadline"] + "T23:59:00+00:00"
-                                    if action.get("deadline") else None,
-                        "source":   "email",
-                    },
-                    timeout=5
+        db = SessionLocal()
+        try:
+            for action in all_action_items:
+                due = None
+                if action.get("deadline"):
+                    try:
+                        due = datetime.fromisoformat(action["deadline"].replace("Z", "+00:00"))
+                    except Exception:
+                        pass
+                
+                new_task = Task(
+                    title    = action["title"],
+                    priority = action["priority"],
+                    deadline = due,
+                    source   = "email"
                 )
-                if resp.status_code == 201:
-                    tasks_created += 1
-            except Exception as e:
-                print(f"Task creation error: {e}")
+                db.add(new_task)
+                tasks_created += 1
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            print(f"Task creation error: {e}")
+        finally:
+            db.close()
 
         # Send summary notification
         if urgent_emails or action_emails or tasks_created > 0:

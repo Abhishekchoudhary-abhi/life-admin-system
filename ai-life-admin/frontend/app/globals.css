@@ -1,0 +1,106 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-blue: #00D1FF;
+  --color-brand-purple: #8B5CF6;
+  --color-brand-light-gray: #F9FAFB;
+  --color-brand-text-main: #111827;
+  --color-brand-text-muted: #6B7280;
+  --color-text-main: #111827;
+  --color-text-muted: #6B7280;
+  
+  --font-inter: "Inter", system-ui, sans-serif;
+  --radius-xl: 0.75rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+}
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --border: 214.3 31.8% 91.4%;
+  --radius: 0.5rem;
+}
+
+@layer base {
+  body {
+    background-color: #FFFFFF;
+    background-image: 
+      radial-gradient(circle at 50% -10%, rgba(0, 209, 255, 0.03) 0%, transparent 60%),
+      radial-gradient(circle at 100% 100%, rgba(139, 92, 246, 0.02) 0%, transparent 40%);
+    @apply text-text-main font-inter antialiased;
+    font-feature-settings: "cv11", "ss01";
+  }
+}
+
+@layer components {
+  .glass-sidebar {
+    background: #F3F4F6;
+    border-right: 1px solid rgba(0, 0, 0, 0.05);
+  }
+
+  .card-polish {
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid rgba(0, 0, 0, 0.05);
+    backdrop-filter: blur(12px);
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    @apply transition-all duration-300;
+  }
+
+  .card-polish:hover {
+    border-color: rgba(0, 209, 255, 0.3);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 20px -8px rgba(0, 0, 0, 0.08);
+  }
+
+  .gradient-border {
+    position: relative;
+    border: 1px solid transparent;
+  }
+  
+  .gradient-border::after {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(0, 209, 255, 0.2), rgba(139, 92, 246, 0.1));
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    -webkit-mask-composite: xor;
+    pointer-events: none;
+  }
+
+  .neon-text-blue {
+    text-shadow: 0 0 8px rgba(0, 209, 255, 0.2);
+  }
+
+  .btn-glow:hover {
+    box-shadow: 0 0 15px rgba(0, 209, 255, 0.2);
+  }
+
+  .active-nav-indicator {
+    position: relative;
+  }
+
+  .active-nav-indicator::before {
+    content: '';
+    position: absolute;
+    left: -24px;
+    height: 24px;
+    width: 4px;
+    @apply bg-brand-blue rounded-r-md shadow-[0_0_10px_rgba(0,209,255,0.4)];
+  }
+
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 10px;
+  }
+}

@@ -2,11 +2,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from backend.core.database import engine, Base
-from backend.api import tasks, assignments, memory
-from backend.scheduler import scheduler
-# Import models so SQLAlchemy registers them for auto-create
-from backend.models import task, assignment  # noqa: F401
+from backend.models import task, assignment, user, uims as uims_model  # noqa: F401
 from backend.models import memory as memory_model  # noqa: F401
+from backend.api import tasks, assignments, memory, ai, gmail, settings, uims
+from backend.scheduler import scheduler
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -51,6 +50,10 @@ app.add_middleware(
 app.include_router(tasks.router)
 app.include_router(assignments.router)
 app.include_router(memory.router)
+app.include_router(ai.router)
+app.include_router(gmail.router)
+app.include_router(settings.router)
+app.include_router(uims.router)
 
 # Simple health check endpoint
 @app.get("/health")

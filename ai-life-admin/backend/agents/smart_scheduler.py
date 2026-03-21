@@ -30,34 +30,13 @@ class SmartSchedulerAgent:
             api_key=settings.GROQ_API_KEY,
         )
 
-    # ── Fetch data ──────────────────────────────────────────────────
-    def _fetch_tasks(self) -> list[dict]:
-        try:
-            resp = requests.get(f"{API}/tasks/", timeout=5)
-            tasks = resp.json()
-            return [t for t in tasks if t.get("status") not in ("done", "cancelled")]
-        except Exception as e:
-            print(f"[Scheduler] Fetch tasks error: {e}")
-            return []
-
-    def _fetch_assignments(self) -> list[dict]:
-        try:
-            resp = requests.get(f"{API}/assignments/", timeout=5)
-            return resp.json()
-        except Exception as e:
-            print(f"[Scheduler] Fetch assignments error: {e}")
-            return []
-
     # ── Core: generate a natural language schedule ──────────────────
-    def generate_plan(self, days_ahead: int = 3) -> str:
+    def generate_plan(self, tasks: list, assignments: list, days_ahead: int = 3) -> str:
         """
-        Ask the LLM to produce a day-by-day study/work plan
+        Produce a day-by-day study/work plan
         for the next N days based on current tasks and assignments.
-        Returns a formatted markdown string.
         """
-        tasks       = self._fetch_tasks()
-        assignments = self._fetch_assignments()
-        now         = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
 
         if not tasks and not assignments:
             return "📭 No tasks or assignments to schedule. You're free! 🎉"
@@ -110,14 +89,11 @@ Reply ONLY with the schedule. No preamble."""),
         return result.content.strip()
 
     # ── Core: structured slot suggestions ──────────────────────────
-    def suggest_slots(self) -> list[dict]:
+    def suggest_slots(self, tasks: list, assignments: list) -> list[dict]:
         """
-        Returns structured slot recommendations:
-        [{"day": "Mon 2026-03-16", "time": "9:00 AM", "task": "...", "hours": 2}, ...]
+        Returns structured slot recommendations.
         """
-        tasks       = self._fetch_tasks()
-        assignments = self._fetch_assignments()
-        now         = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
 
         items = []
         # Merge tasks and assignments, score by urgency
@@ -188,8 +164,8 @@ Reply ONLY with the schedule. No preamble."""),
         return slots
 
     # ── Format slots as Telegram-friendly text ──────────────────────
-    def format_slots_telegram(self) -> str:
-        slots = self.suggest_slots()
+    def format_slots_telegram(self, tasks: list, assignments: list) -> str:
+        slots = self.suggest_slots(tasks, assignments)
         if not slots:
             return "📭 Nothing to schedule!"
 

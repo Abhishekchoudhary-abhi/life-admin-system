@@ -59,6 +59,7 @@ Available intents:
 - check_emails      : user wants to check/read emails
 - get_briefing      : user wants a summary of their day
 - get_schedule      : user wants a study/work plan or schedule suggestion
+- get_strategy      : user wants a long-term lifestyle, study or productivity strategy
 - general_chat      : anything else
 
 Reply with ONLY the intent name. Nothing else.{history_note}"""),
@@ -129,6 +130,7 @@ def route_to_agent(state: AgentState) -> str:
         "check_emails":     "email_agent",
         "get_briefing":     "briefing_agent",
         "get_schedule":     "schedule_agent",
+        "get_strategy":     "lifestyle_agent",
         "general_chat":     "chat_agent",
     }
     route = routes.get(state["intent"], "chat_agent")
@@ -238,23 +240,29 @@ def email_agent_node(state: AgentState) -> AgentState:
 # ── Node 4d: Briefing Agent ───────────────────────────────────────
 def briefing_agent_node(state: AgentState) -> AgentState:
     try:
-        import requests
-        tasks_resp  = requests.get("http://localhost:8000/tasks/",       timeout=5)
-        assign_resp = requests.get("http://localhost:8000/assignments/", timeout=5)
-        tasks       = tasks_resp.json()
-        assignments = assign_resp.json()
+        from backend.core.database import SessionLocal
+        from backend.models.task import Task
+        from backend.models.assignment import Assignment
+        from sqlalchemy import select
+        
+        db = SessionLocal()
+        try:
+            tasks = db.query(Task).filter(Task.status == "todo").all()
+            assignments = db.query(Assignment).filter(Assignment.status != "submitted").all()
 
-        pending  = [t for t in tasks if t["status"] == "todo"]
-        urgent   = [t for t in pending if t["priority"] == 1]
-        upcoming = assignments[:3]
+            pending  = tasks
+            urgent   = [t for t in pending if t.priority == 1]
+            upcoming = assignments[:3]
 
-        parts = [
-            f"TASKS:{len(pending)} pending, {len(urgent)} urgent",
-            f"TOP_TASKS:{', '.join(t['title'] for t in pending[:3])}",
-            f"ASSIGNMENTS:{len(upcoming)} upcoming",
-            f"TOP_ASSIGNMENTS:{', '.join(a['course_code'] + ': ' + a['title'] for a in upcoming[:2])}",
-        ]
-        agent_result = "BRIEFING:" + " | ".join(parts)
+            parts = [
+                f"TASKS:{len(pending)} pending, {len(urgent)} urgent",
+                f"TOP_TASKS:{', '.join(t.title for t in pending[:3])}",
+                f"ASSIGNMENTS:{len(upcoming)} upcoming",
+                f"TOP_ASSIGNMENTS:{', '.join(a.course_code + ': ' + a.title for a in upcoming[:2])}",
+            ]
+            agent_result = "BRIEFING:" + " | ".join(parts)
+        finally:
+            db.close()
 
     except Exception as e:
         agent_result = f"ERROR:{str(e)}"
@@ -284,10 +292,52 @@ Keep replies under 3 sentences.
 # ── Node 4f: Schedule Agent ───────────────────────────────────────
 def schedule_agent_node(state: AgentState) -> AgentState:
     try:
+        from backend.core.database import SessionLocal
+        from backend.models.task import Task
+        from backend.models.assignment import Assignment
         from backend.agents.smart_scheduler import SmartSchedulerAgent
-        agent = SmartSchedulerAgent()
-        plan  = agent.generate_plan(days_ahead=3)
-        return {**state, "agent_result": f"SCHEDULE:{plan}"}
+        
+        db = SessionLocal()
+        try:
+            tasks       = [
+                {"id": str(t.id), "title": t.title, "priority": t.priority, "status": t.status, "deadline": t.deadline.isoformat() if t.deadline else None, "estimated_minutes": t.estimated_minutes}
+                for t in db.query(Task).all()
+            ]
+            assignments = [
+                {"id": str(a.id), "title": a.title, "course_code": a.course_code, "due_date": a.due_date.isoformat() if a.due_date else None, "status": a.status, "weight_percent": a.weight_percent, "estimated_hours": a.estimated_hours}
+                for a in db.query(Assignment).all()
+            ]
+            agent = SmartSchedulerAgent()
+            plan  = agent.generate_plan(tasks, assignments, days_ahead=3)
+            return {**state, "agent_result": f"SCHEDULE:{plan}"}
+        finally:
+            db.close()
+    except Exception as e:
+        return {**state, "agent_result": f"ERROR:{str(e)}"}
+
+# ── Node 4g: Lifestyle Agent ──────────────────────────────────────
+def lifestyle_agent_node(state: AgentState) -> AgentState:
+    try:
+        from backend.core.database import SessionLocal
+        from backend.models.task import Task
+        from backend.models.assignment import Assignment
+        from backend.agents.planning_agent import PlanningAgent
+        
+        db = SessionLocal()
+        try:
+            tasks       = [
+                {"id": str(t.id), "title": t.title, "priority": t.priority, "status": t.status, "deadline": t.deadline.isoformat() if t.deadline else None, "estimated_minutes": t.estimated_minutes}
+                for t in db.query(Task).all()
+            ]
+            assignments = [
+                {"id": str(a.id), "title": a.title, "course_code": a.course_code, "due_date": a.due_date.isoformat() if a.due_date else None, "status": a.status, "weight_percent": a.weight_percent, "estimated_hours": a.estimated_hours}
+                for a in db.query(Assignment).all()
+            ]
+            agent = PlanningAgent()
+            strategy = agent.generate_daily_plan(tasks, assignments)
+            return {**state, "agent_result": f"STRATEGY:{strategy}"}
+        finally:
+            db.close()
     except Exception as e:
         return {**state, "agent_result": f"ERROR:{str(e)}"}
 
@@ -309,6 +359,10 @@ def synthesize_response(state: AgentState) -> AgentState:
 
     # Schedule response — already formatted — pass through
     elif agent_result.startswith("SCHEDULE:"):
+        final = agent_result[9:]
+
+    # Strategy response — pass through
+    elif agent_result.startswith("STRATEGY:"):
         final = agent_result[9:]
 
     else:
@@ -347,6 +401,7 @@ def build_orchestrator():
     graph.add_node("email_agent",      email_agent_node)
     graph.add_node("briefing_agent",   briefing_agent_node)
     graph.add_node("schedule_agent",   schedule_agent_node)
+    graph.add_node("lifestyle_agent",  lifestyle_agent_node)
     graph.add_node("chat_agent",       chat_agent_node)
     graph.add_node("synthesize",       synthesize_response)
 
@@ -364,6 +419,7 @@ def build_orchestrator():
             "email_agent":      "email_agent",
             "briefing_agent":   "briefing_agent",
             "schedule_agent":   "schedule_agent",
+            "lifestyle_agent":  "lifestyle_agent",
             "chat_agent":       "chat_agent",
         }
     )
@@ -373,6 +429,7 @@ def build_orchestrator():
     graph.add_edge("email_agent",      "synthesize")
     graph.add_edge("briefing_agent",   "synthesize")
     graph.add_edge("schedule_agent",   "synthesize")
+    graph.add_edge("lifestyle_agent",  "synthesize")
     graph.add_edge("chat_agent",       "synthesize")
     graph.add_edge("synthesize",       END)
 
