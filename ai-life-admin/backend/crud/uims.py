@@ -28,6 +28,21 @@ async def update_attendance(db: AsyncSession, subject_id: uuid.UUID, attended: b
         await db.refresh(subject)
     return subject
 
+async def decrease_attendance(db: AsyncSession, subject_id: uuid.UUID, type: str):
+    # type: "lecture" removes one total class, "attendance" removes one attended class
+    subject = await db.get(Subject, subject_id)
+    if subject:
+        if type == "lecture" and subject.total_classes > 0:
+            subject.total_classes -= 1
+            # Also decrease attended if it's greater than total
+            if subject.attended_classes > subject.total_classes:
+                subject.attended_classes -= 1
+        elif type == "attendance" and subject.attended_classes > 0:
+            subject.attended_classes -= 1
+        await db.commit()
+        await db.refresh(subject)
+    return subject
+
 async def delete_subject(db: AsyncSession, subject_id: uuid.UUID):
     await db.execute(delete(Subject).where(Subject.id == subject_id))
     await db.commit()

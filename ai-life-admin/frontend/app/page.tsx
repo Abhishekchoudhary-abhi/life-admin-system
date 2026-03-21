@@ -17,6 +17,7 @@ import {
   getSubjects,
   createSubject,
   updateAttendance,
+  decreaseAttendance,
   getTimetable,
   addTimetableSlot,
   getMarks,
@@ -514,6 +515,15 @@ export default function Dashboard() {
                                             >
                                                 Miss
                                             </button>
+                                            <button 
+                                                onClick={async () => {
+                                                    await decreaseAttendance(slot.subject_id, "lecture");
+                                                    loadUIMSData();
+                                                }}
+                                                className="px-4 py-2 rounded-xl bg-blue-50 text-blue-600 text-[10px] font-black uppercase tracking-tight opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all border border-blue-100"
+                                            >
+                                                - Lec
+                                            </button>
                                         </div>
                                     </div>
                                 )) : (
@@ -621,6 +631,27 @@ export default function Dashboard() {
                                             className="flex-1 py-3 rounded-2xl bg-gray-50 hover:bg-rose-50 hover:text-rose-600 text-gray-500 text-[10px] font-black uppercase tracking-widest border border-black/5 transition-all"
                                         >
                                             Missed
+                                        </button>
+                                    </div>
+
+                                    <div className="flex items-center gap-3">
+                                        <button 
+                                            onClick={async () => {
+                                                await decreaseAttendance(subject.id, "lecture");
+                                                loadUIMSData();
+                                            }}
+                                            className="flex-1 py-3 rounded-2xl bg-gray-50 hover:bg-blue-50 hover:text-blue-600 text-gray-500 text-[10px] font-black uppercase tracking-widest border border-black/5 transition-all"
+                                        >
+                                            - Lecture
+                                        </button>
+                                        <button 
+                                            onClick={async () => {
+                                                await decreaseAttendance(subject.id, "attendance");
+                                                loadUIMSData();
+                                            }}
+                                            className="flex-1 py-3 rounded-2xl bg-gray-50 hover:bg-purple-50 hover:text-purple-600 text-gray-500 text-[10px] font-black uppercase tracking-widest border border-black/5 transition-all"
+                                        >
+                                            - Attendance
                                         </button>
                                     </div>
 

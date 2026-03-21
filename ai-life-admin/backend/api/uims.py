@@ -17,6 +17,10 @@ class AttendanceUpdate(BaseModel):
     subject_id: uuid.UUID
     attended: bool # True = attended, False = missed
 
+class AttendanceDecrease(BaseModel):
+    subject_id: uuid.UUID
+    type: str # "lecture" or "attendance"
+
 class TimetableCreate(BaseModel):
     subject_id: uuid.UUID
     day: str
@@ -49,6 +53,13 @@ async def delete_subject(subject_id: uuid.UUID, db: AsyncSession = Depends(get_d
 @router.post("/attendance/update")
 async def update_attendance(payload: AttendanceUpdate, db: AsyncSession = Depends(get_db)):
     subject = await crud.update_attendance(db, payload.subject_id, payload.attended)
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+    return subject
+
+@router.post("/attendance/decrease")
+async def decrease_attendance(payload: AttendanceDecrease, db: AsyncSession = Depends(get_db)):
+    subject = await crud.decrease_attendance(db, payload.subject_id, payload.type)
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
     return subject

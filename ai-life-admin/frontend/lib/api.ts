@@ -166,6 +166,11 @@ export const updateAttendance = async (subject_id: string, attended: boolean): P
     return res.data;
 };
 
+export const decreaseAttendance = async (subject_id: string, type: "lecture" | "attendance"): Promise<any> => {
+    const res = await api.post("/uims/attendance/decrease", { subject_id, type });
+    return res.data;
+};
+
 export const getTimetable = async (): Promise<any[]> => {
     const res = await api.get("/uims/timetable");
     return res.data;
