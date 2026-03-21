@@ -829,6 +829,17 @@ export default function Dashboard() {
                         </div>
                      ) : (
                         <div className="space-y-8">
+                            {/* Interactive Timeline - Show for first subject */}
+                            {subjects.length > 0 && (
+                                <div className="animate-in fade-in duration-500">
+                                    <AttendanceTimeline 
+                                        currentTotal={subjects[0]?.total_classes || 0}
+                                        currentAttended={subjects[0]?.attended_classes || 0}
+                                        subjectName={subjects[0]?.name || ""}
+                                    />
+                                </div>
+                            )}
+
                             {/* Traditional Card View */}
                             <div className="space-y-6">
                                 <div className="px-2">
