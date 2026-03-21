@@ -115,6 +115,7 @@ export default function Dashboard() {
   const [isFetchingMail, setIsFetchingMail] = useState(false);
   const [settings, setSettings] = useState<any>(null);
   const [isFetchingSettings, setIsFetchingSettings] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("default");
 
   const loadSettings = useCallback(async () => {
     setIsFetchingSettings(true);
@@ -281,6 +282,158 @@ export default function Dashboard() {
     }
   }, []);
 
+  const requestNotificationPermission = useCallback(async () => {
+    if (typeof window === "undefined" || !("Notification" in window)) {
+      alert("This browser does not support notifications.");
+      return;
+    }
+
+    const result = await Notification.requestPermission();
+    setNotificationPermission(result);
+    if (result === "granted") {
+      new Notification("Notifications enabled", {
+        body: "Lecture and task reminders are active.",
+      });
+    }
+  }, []);
+
+  const parseTimeToMinutes = useCallback((time: string) => {
+    const value = (time || "00:00").trim().toLowerCase();
+    const ampmMatch = value.match(/(\d{1,2}):(\d{2})\s*(am|pm)/);
+    if (ampmMatch) {
+      let h = parseInt(ampmMatch[1], 10);
+      const m = parseInt(ampmMatch[2], 10);
+      const meridiem = ampmMatch[3];
+      if (meridiem === "pm" && h < 12) h += 12;
+      if (meridiem === "am" && h === 12) h = 0;
+      return (h * 60) + m;
+    }
+
+    const [hText, mText] = value.split(":");
+    let h = parseInt(hText || "0", 10);
+    const m = parseInt(mText || "0", 10);
+    if (h >= 1 && h <= 6) h += 12;
+    return (h * 60) + m;
+  }, []);
+
+  const shouldNotifyNow = useCallback((target: Date, minutesBefore: number = 10) => {
+    const now = new Date();
+    const diffMs = target.getTime() - now.getTime();
+    const diffMinutes = Math.floor(diffMs / 60000);
+    return diffMinutes >= 0 && diffMinutes <= minutesBefore;
+  }, []);
+
+  const sendReminder = useCallback((key: string, title: string, body: string) => {
+    if (typeof window === "undefined" || notificationPermission !== "granted") return;
+
+    const storageKey = `notify:${key}`;
+    if (localStorage.getItem(storageKey)) return;
+
+    new Notification(title, { body });
+    localStorage.setItem(storageKey, new Date().toISOString());
+  }, [notificationPermission]);
+
+  const notificationConfig = useMemo(() => {
+    const lead = Number(settings?.notification_lead_minutes ?? 10);
+    return {
+      enabled: settings?.notifications_enabled ?? true,
+      lectures: settings?.notify_lectures ?? true,
+      tasks: settings?.notify_tasks ?? true,
+      assignments: settings?.notify_assignments ?? true,
+      emails: settings?.notify_emails ?? false,
+      leadMinutes: Number.isFinite(lead) ? Math.max(1, Math.min(60, lead)) : 10,
+    };
+  }, [settings]);
+
+  const checkLectureReminders = useCallback(() => {
+    if (notificationPermission !== "granted" || !notificationConfig.enabled || !notificationConfig.lectures) return;
+
+    const dayMap = {
+      0: "Sunday",
+      1: "Monday",
+      2: "Tuesday",
+      3: "Wednesday",
+      4: "Thursday",
+      5: "Friday",
+      6: "Saturday",
+    } as const;
+
+    const now = new Date();
+    const todayName = dayMap[now.getDay() as keyof typeof dayMap];
+    const todaySlots = timetable.filter((slot) => slot.day === todayName);
+
+    for (const slot of todaySlots) {
+      const lectureMinutes = parseTimeToMinutes(slot.start_time);
+      const lectureDate = new Date(now);
+      lectureDate.setHours(Math.floor(lectureMinutes / 60), lectureMinutes % 60, 0, 0);
+
+      if (shouldNotifyNow(lectureDate, notificationConfig.leadMinutes)) {
+        const subjectName = subjects.find((s) => s.id === slot.subject_id)?.name || "Lecture";
+        sendReminder(
+          `lecture:${slot.id}:${lectureDate.toDateString()}`,
+          `Upcoming lecture: ${subjectName}`,
+          `Starts at ${slot.start_time}${slot.room ? ` in ${slot.room}` : ""} (in about ${notificationConfig.leadMinutes} minutes).`
+        );
+      }
+    }
+  }, [notificationConfig.enabled, notificationConfig.lectures, notificationConfig.leadMinutes, notificationPermission, parseTimeToMinutes, sendReminder, shouldNotifyNow, subjects, timetable]);
+
+  const checkTaskAndAssignmentReminders = useCallback(() => {
+    if (notificationPermission !== "granted" || !notificationConfig.enabled) return;
+
+    if (notificationConfig.tasks) {
+      for (const task of tasks) {
+        if (task.status === "done") continue;
+        const candidate = task.scheduled_at || task.deadline;
+        if (!candidate) continue;
+
+        const when = new Date(candidate);
+        if (Number.isNaN(when.getTime())) continue;
+
+        if (shouldNotifyNow(when, notificationConfig.leadMinutes)) {
+          sendReminder(
+            `task:${task.id}:${when.toISOString()}`,
+            `Upcoming task: ${task.title}`,
+            `Reminder at ${when.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`
+          );
+        }
+      }
+    }
+
+    if (notificationConfig.assignments) {
+      for (const assignment of assignments) {
+        if (assignment.status === "done" || assignment.status === "submitted") continue;
+
+        const due = new Date(assignment.due_date);
+        if (Number.isNaN(due.getTime())) continue;
+        if (!assignment.due_date.includes("T")) {
+          due.setHours(9, 0, 0, 0);
+        }
+
+        if (shouldNotifyNow(due, notificationConfig.leadMinutes)) {
+          sendReminder(
+            `assignment:${assignment.id}:${due.toISOString()}`,
+            `Upcoming assignment: ${assignment.title}`,
+            `Due soon (${assignment.course_code}) at ${due.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`
+          );
+        }
+      }
+    }
+  }, [assignments, notificationConfig.assignments, notificationConfig.enabled, notificationConfig.leadMinutes, notificationConfig.tasks, notificationPermission, sendReminder, shouldNotifyNow, tasks]);
+
+  const checkEmailReminders = useCallback(() => {
+    if (notificationPermission !== "granted" || !notificationConfig.enabled || !notificationConfig.emails) return;
+
+    for (const mail of emails) {
+      const key = `email:${mail.id}`;
+      sendReminder(
+        key,
+        "Unread email reminder",
+        `${mail.subject || "New email"}${mail.from ? ` from ${mail.from}` : ""}`
+      );
+    }
+  }, [emails, notificationConfig.emails, notificationConfig.enabled, notificationPermission, sendReminder]);
+
   useEffect(() => {
     loadBriefing();
     loadEmails();
@@ -293,6 +446,32 @@ export default function Dashboard() {
     const interval = setInterval(loadData, 60000);
     return () => clearInterval(interval);
   }, [loadData]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !("Notification" in window)) return;
+    setNotificationPermission(Notification.permission);
+  }, []);
+
+  useEffect(() => {
+    if (notificationPermission !== "granted") return;
+
+    checkLectureReminders();
+    checkTaskAndAssignmentReminders();
+    checkEmailReminders();
+
+    const interval = setInterval(() => {
+      checkLectureReminders();
+      checkTaskAndAssignmentReminders();
+      checkEmailReminders();
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, [
+    checkLectureReminders,
+    checkTaskAndAssignmentReminders,
+    checkEmailReminders,
+    notificationPermission,
+  ]);
 
   // Logic
   const pendingTasks = useMemo(() => tasks.filter((t: Task) => t.status !== "done"), [tasks]);
@@ -314,6 +493,93 @@ export default function Dashboard() {
     return total > 0 ? Math.round((completedToday.length / total) * 100) : 0;
   }, [pendingTasks, completedToday]);
 
+  const todayTimetable = useMemo(() => {
+    const dayMap = {
+      0: "Sunday",
+      1: "Monday",
+      2: "Tuesday",
+      3: "Wednesday",
+      4: "Thursday",
+      5: "Friday",
+      6: "Saturday",
+    } as const;
+
+    const todayName = dayMap[new Date().getDay() as keyof typeof dayMap];
+
+    const toMinutes = (time: string) => {
+      const value = (time || "00:00").trim().toLowerCase();
+      const ampmMatch = value.match(/(\d{1,2}):(\d{2})\s*(am|pm)/);
+      if (ampmMatch) {
+        let h = parseInt(ampmMatch[1], 10);
+        const m = parseInt(ampmMatch[2], 10);
+        const meridiem = ampmMatch[3];
+        if (meridiem === "pm" && h < 12) h += 12;
+        if (meridiem === "am" && h === 12) h = 0;
+        return (h * 60) + m;
+      }
+
+      const [hText, mText] = value.split(":");
+      let h = parseInt(hText || "0", 10);
+      const m = parseInt(mText || "0", 10);
+
+      if (h >= 1 && h <= 6) {
+        h += 12;
+      }
+
+      return (h * 60) + m;
+    };
+
+    return [...timetable]
+      .filter((slot) => slot.day === todayName)
+      .sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+  }, [timetable]);
+
+  const timetableByDay = useMemo(() => {
+    const toMinutes = (time: string) => {
+      const value = (time || "00:00").trim().toLowerCase();
+      const ampmMatch = value.match(/(\d{1,2}):(\d{2})\s*(am|pm)/);
+      if (ampmMatch) {
+        let h = parseInt(ampmMatch[1], 10);
+        const m = parseInt(ampmMatch[2], 10);
+        const meridiem = ampmMatch[3];
+        if (meridiem === "pm" && h < 12) h += 12;
+        if (meridiem === "am" && h === 12) h = 0;
+        return (h * 60) + m;
+      }
+
+      const [hText, mText] = value.split(":");
+      let h = parseInt(hText || "0", 10);
+      const m = parseInt(mText || "0", 10);
+
+      if (h >= 1 && h <= 6) {
+        h += 12;
+      }
+
+      return (h * 60) + m;
+    };
+
+    const dayMap: Record<string, any[]> = {
+      Monday: [],
+      Tuesday: [],
+      Wednesday: [],
+      Thursday: [],
+      Friday: [],
+      Saturday: [],
+    };
+
+    for (const slot of timetable) {
+      if (dayMap[slot.day]) {
+        dayMap[slot.day].push(slot);
+      }
+    }
+
+    for (const day of Object.keys(dayMap)) {
+      dayMap[day].sort((a, b) => toMinutes(a.start_time) - toMinutes(b.start_time));
+    }
+
+    return dayMap;
+  }, [timetable]);
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen bg-white gap-6">
@@ -333,7 +599,12 @@ export default function Dashboard() {
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} user={settings} />
 
       <main className="flex-1 flex flex-col overflow-hidden relative">
-        <Navbar onAddTask={() => setShowTaskModal(true)} onAddAssignment={() => setShowAsgModal(true)} apiOk={apiOk} />
+        <Navbar
+          onAddTask={() => setShowTaskModal(true)}
+          onAddAssignment={() => setShowAsgModal(true)}
+          onRequestNotifications={requestNotificationPermission}
+          apiOk={apiOk}
+        />
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {activeTab === "overview" && (
@@ -513,7 +784,7 @@ export default function Dashboard() {
                                 <button className="text-[10px] font-black text-brand-blue uppercase tracking-widest flex items-center gap-1">Update Full <ChevronRight className="w-3 h-3" /></button>
                             </div>
                             <div className="space-y-4">
-                                {timetable.length > 0 ? timetable.map(slot => (
+                              {todayTimetable.length > 0 ? todayTimetable.map(slot => (
                                     <div key={slot.id} className="card-polish rounded-3xl p-6 bg-white flex items-center justify-between group">
                                         <div className="flex items-center gap-4">
                                             <div className="w-12 h-12 rounded-2xl bg-gray-50 flex flex-col items-center justify-center text-gray-400 font-black text-[10px]">
@@ -786,7 +1057,7 @@ export default function Dashboard() {
                                      <h4 className="text-[10px] font-black text-brand-blue uppercase tracking-[0.2em]">{day}</h4>
                                  </div>
                                  <div className="space-y-3">
-                                    {timetable.filter(t => t.day === day).map(slot => (
+                            {timetableByDay[day].map(slot => (
                                         <div key={slot.id} className="card-polish rounded-2xl p-4 bg-white border-l-2 border-l-brand-purple space-y-2 group cursor-pointer hover:scale-105">
                                             <p className="text-[11px] font-black text-brand-textMain leading-tight">{subjects.find(s => s.id === slot.subject_id)?.name || "Subject"}</p>
                                             <div className="flex items-center justify-between">
@@ -795,7 +1066,7 @@ export default function Dashboard() {
                                             </div>
                                         </div>
                                     ))}
-                                    {timetable.filter(t => t.day === day).length === 0 && (
+                            {timetableByDay[day].length === 0 && (
                                         <div className="border border-dashed border-gray-200 rounded-2xl py-8 text-center">
                                             <p className="text-[8px] font-black text-gray-300 uppercase tracking-widest">No Classes</p>
                                         </div>
@@ -1227,6 +1498,58 @@ export default function Dashboard() {
                         </button>
                      </div>
                   </div>
+
+                  <section className="card-polish rounded-[32px] p-8 bg-white space-y-6">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <h4 className="text-[15px] font-black text-brand-textMain">Alert Preferences</h4>
+                        <p className="text-[10px] text-gray-500 font-medium">Choose what should notify you and how early.</p>
+                      </div>
+                      <button
+                        onClick={requestNotificationPermission}
+                        className="px-4 py-2 rounded-xl bg-brand-blue/10 text-brand-blue text-[10px] font-black uppercase tracking-widest hover:bg-brand-blue/20 transition-all"
+                      >
+                        Allow Browser Notifications
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+                      {[
+                        { key: "notify_lectures", label: "Lectures" },
+                        { key: "notify_tasks", label: "Tasks" },
+                        { key: "notify_assignments", label: "Assignments" },
+                        { key: "notify_emails", label: "Emails" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.key}
+                          onClick={() => handleUpdateSettings({ [opt.key]: !(settings?.[opt.key] ?? (opt.key !== "notify_emails")) })}
+                          className={cn(
+                            "py-3 rounded-xl border text-[10px] font-black uppercase tracking-widest transition-all",
+                            (settings?.[opt.key] ?? (opt.key !== "notify_emails"))
+                              ? "bg-emerald-50 text-emerald-600 border-emerald-200"
+                              : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
+                          )}
+                        >
+                          {opt.label}: {(settings?.[opt.key] ?? (opt.key !== "notify_emails")) ? "On" : "Off"}
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-1">Lead Time For Alerts</label>
+                      <select
+                        value={settings?.notification_lead_minutes ?? 10}
+                        onChange={(e) => handleUpdateSettings({ notification_lead_minutes: Number(e.target.value) })}
+                        className="w-full md:w-64 bg-gray-50 border border-gray-100 rounded-2xl p-4 text-sm font-bold text-brand-textMain focus:outline-none focus:border-brand-blue/30 transition-colors"
+                      >
+                        <option value={5}>5 minutes before</option>
+                        <option value={10}>10 minutes before</option>
+                        <option value={15}>15 minutes before</option>
+                        <option value={30}>30 minutes before</option>
+                        <option value={60}>60 minutes before</option>
+                      </select>
+                    </div>
+                  </section>
                </div>
             </div>
           )}

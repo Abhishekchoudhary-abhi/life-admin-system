@@ -15,7 +15,7 @@ start "Telegram Bot" cmd /k "cd /d D:\Life-Admin\ai-life-admin && venv\Scripts\a
 timeout /t 2 /nobreak > nul
 
 echo Starting Frontend...
-start "Frontend" cmd /k "cd /d D:\Life-Admin\frontend && npm run dev"
+start "Frontend" cmd /k "cd /d D:\Life-Admin\ai-life-admin\frontend && npm run dev"
 
 echo.
 echo ================================

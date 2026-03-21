@@ -11,10 +11,11 @@ import { cn } from "@/lib/utils";
 interface NavbarProps {
   onAddTask: () => void;
   onAddAssignment: () => void;
+  onRequestNotifications?: () => void;
   apiOk: boolean;
 }
 
-export default function Navbar({ onAddTask, onAddAssignment, apiOk }: NavbarProps) {
+export default function Navbar({ onAddTask, onAddAssignment, onRequestNotifications, apiOk }: NavbarProps) {
   return (
     <header className="p-4 lg:p-8 pb-4 space-y-4 lg:space-y-8 sticky top-0 bg-white/80 backdrop-blur-md z-40 border-b border-black/5">
       <div className="flex items-center justify-between gap-4">
@@ -46,7 +47,11 @@ export default function Navbar({ onAddTask, onAddAssignment, apiOk }: NavbarProp
             <span className="hidden sm:inline">{apiOk ? "Live" : "Offline"}</span>
           </div>
 
-          <button className="w-9 h-9 lg:w-10 lg:h-10 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-500 hover:text-brand-textMain transition-all relative group shrink-0">
+          <button
+            onClick={onRequestNotifications}
+            className="w-9 h-9 lg:w-10 lg:h-10 rounded-xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-500 hover:text-brand-textMain transition-all relative group shrink-0"
+            title="Enable notifications"
+          >
             <Bell className="w-4 h-4 lg:w-5 lg:h-5" />
             <span className="absolute top-2 right-2 w-1.5 h-1.5 bg-brand-blue rounded-full border-2 border-white group-hover:scale-110 transition-transform"></span>
           </button>

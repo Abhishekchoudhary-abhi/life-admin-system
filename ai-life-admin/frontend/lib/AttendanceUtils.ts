@@ -175,9 +175,26 @@ export const generateTimelineNodesFromTimetable = (
  */
 const timeToMinutes = (timeStr: string): number => {
   if (!timeStr) return 0;
-  const parts = timeStr.trim().split(":");
-  const hours = parseInt(parts[0] || "0", 10);
+  const value = timeStr.trim().toLowerCase();
+  const ampmMatch = value.match(/(\d{1,2}):(\d{2})\s*(am|pm)/);
+  if (ampmMatch) {
+    let h = parseInt(ampmMatch[1], 10);
+    const m = parseInt(ampmMatch[2], 10);
+    const meridiem = ampmMatch[3];
+    if (meridiem === "pm" && h < 12) h += 12;
+    if (meridiem === "am" && h === 12) h = 0;
+    return h * 60 + m;
+  }
+
+  const parts = value.split(":");
+  let hours = parseInt(parts[0] || "0", 10);
   const minutes = parseInt(parts[1] || "0", 10);
+
+  // Heuristic: in class schedules, times 01:00-06:59 are usually afternoon slots.
+  if (hours >= 1 && hours <= 6) {
+    hours += 12;
+  }
+
   return hours * 60 + minutes;
 };
 
