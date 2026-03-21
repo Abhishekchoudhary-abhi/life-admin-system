@@ -96,6 +96,7 @@ export default function Dashboard() {
   const [timetable, setTimetable] = useState<any[]>([]);
   const [marks, setMarks] = useState<any[]>([]);
   const [predictions, setPredictions] = useState<any[]>([]);
+  const [selectedSubjectForTimeline, setSelectedSubjectForTimeline] = useState<string | null>(null);
   const [uimsSubTab, setUimsSubTab] = useState<"home" | "attendance" | "timetable" | "marks" | "prediction">("home");
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [showTaskModal, setShowTaskModal] = useState(false);
@@ -168,10 +169,14 @@ export default function Dashboard() {
       setSubjects(subs);
       setTimetable(tt);
       setMarks(mrks);
+      // Set first subject as default for timeline
+      if (subs.length > 0 && !selectedSubjectForTimeline) {
+        setSelectedSubjectForTimeline(subs[0].id);
+      }
     } catch (err) {
       console.error("UIMS load error:", err);
     }
-  }, []);
+  }, [selectedSubjectForTimeline]);
 
   const loadBriefing = useCallback(async () => {
     setIsGeneratingBriefing(true);
@@ -811,7 +816,7 @@ export default function Dashboard() {
                         </div>
                         {subjects.length > 0 && (
                             <button 
-                                onClick={() => handleGeneratePredictions(subjects[0]?.id)}
+                                onClick={() => handleGeneratePredictions(selectedSubjectForTimeline || subjects[0]?.id)}
                                 className="bg-brand-blue text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-brand-blue/20 active:scale-95 transition-all"
                             >
                                 <RefreshCcw className="w-4 h-4" /> Generate Predictions
@@ -829,14 +834,40 @@ export default function Dashboard() {
                         </div>
                      ) : (
                         <div className="space-y-8">
-                            {/* Interactive Timeline - Show for first subject */}
-                            {subjects.length > 0 && (
+                            {/* Subject Selector */}
+                            <div className="flex items-center gap-3 bg-gray-50 rounded-[24px] p-4 border border-gray-100">
+                                <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest whitespace-nowrap">
+                                    Select Subject
+                                </label>
+                                <select
+                                    value={selectedSubjectForTimeline || ""}
+                                    onChange={(e) => {
+                                        setSelectedSubjectForTimeline(e.target.value);
+                                        loadPredictions(e.target.value);
+                                    }}
+                                    className="flex-1 px-4 py-3 rounded-xl bg-white border border-gray-200 text-sm font-bold text-brand-textMain focus:ring-2 focus:ring-brand-blue outline-none transition-all"
+                                >
+                                    {subjects.map(subject => (
+                                        <option key={subject.id} value={subject.id}>
+                                            {subject.name} - {subject.faculty || "Prof"} ({Math.round((subject.attended_classes / (subject.total_classes || 1)) * 100)}%)
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Interactive Timeline - Show for selected subject */}
+                            {selectedSubjectForTimeline && subjects.find(s => s.id === selectedSubjectForTimeline) && (
                                 <div className="animate-in fade-in duration-500">
-                                    <AttendanceTimeline 
-                                        currentTotal={subjects[0]?.total_classes || 0}
-                                        currentAttended={subjects[0]?.attended_classes || 0}
-                                        subjectName={subjects[0]?.name || ""}
-                                    />
+                                    {(() => {
+                                        const selectedSubject = subjects.find(s => s.id === selectedSubjectForTimeline);
+                                        return selectedSubject ? (
+                                            <AttendanceTimeline 
+                                                currentTotal={selectedSubject.total_classes || 0}
+                                                currentAttended={selectedSubject.attended_classes || 0}
+                                                subjectName={selectedSubject.name || ""}
+                                            />
+                                        ) : null;
+                                    })()}
                                 </div>
                             )}
 
