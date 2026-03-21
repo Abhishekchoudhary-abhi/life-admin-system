@@ -35,6 +35,10 @@ class MarkCreate(BaseModel):
     obtained: float
     total: float
 
+class PredictionStatusUpdate(BaseModel):
+    prediction_id: uuid.UUID
+    status: str # "present", "absent", "leave"
+
 # --- Subject Endpoints ---
 @router.get("/subjects")
 async def read_subjects(db: AsyncSession = Depends(get_db)):
@@ -91,3 +95,36 @@ async def create_mark(payload: MarkCreate, db: AsyncSession = Depends(get_db)):
 async def delete_mark(mark_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
     await crud.delete_mark(db, mark_id)
     return {"message": "Deleted"}
+
+# --- Attendance Prediction Endpoints ---
+@router.post("/predictions/generate/{subject_id}")
+async def generate_predictions(subject_id: uuid.UUID, days_ahead: int = 30, db: AsyncSession = Depends(get_db)):
+    """Generate attendance predictions based on timetable and attendance percentage"""
+    predictions = await crud.generate_attendance_predictions(db, subject_id, days_ahead)
+    return {"predictions_generated": len(predictions), "predictions": predictions}
+
+@router.get("/predictions/{subject_id}")
+async def get_predictions(subject_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Get all attendance predictions for a subject"""
+    predictions = await crud.get_attendance_predictions(db, subject_id)
+    return predictions
+
+@router.post("/predictions/update-status")
+async def update_prediction_status(payload: PredictionStatusUpdate, db: AsyncSession = Depends(get_db)):
+    """Update the status of a prediction (present, absent, leave)"""
+    prediction = await crud.update_prediction_status(db, payload.prediction_id, payload.status)
+    if not prediction:
+        raise HTTPException(status_code=404, detail="Prediction not found")
+    return prediction
+
+@router.delete("/predictions/{prediction_id}")
+async def delete_prediction(prediction_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Delete a prediction"""
+    await crud.delete_prediction(db, prediction_id)
+    return {"message": "Deleted"}
+
+@router.delete("/predictions/clear/{subject_id}")
+async def clear_predictions(subject_id: uuid.UUID, db: AsyncSession = Depends(get_db)):
+    """Clear all predictions for a subject"""
+    await crud.clear_predictions(db, subject_id)
+    return {"message": "Predictions cleared"}

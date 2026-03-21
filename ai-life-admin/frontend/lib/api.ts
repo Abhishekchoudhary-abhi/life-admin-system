@@ -190,3 +190,25 @@ export const addMark = async (payload: any): Promise<any> => {
     const res = await api.post("/uims/marks", payload);
     return res.data;
 };
+
+export const generateAttendancePredictions = async (subject_id: string, days_ahead: number = 30): Promise<any> => {
+    const res = await api.post(`/uims/predictions/generate/${subject_id}`, { days_ahead });
+    return res.data;
+};
+
+export const getAttendancePredictions = async (subject_id: string): Promise<any[]> => {
+    const res = await api.get(`/uims/predictions/${subject_id}`);
+    return res.data;
+};
+
+export const updatePredictionStatus = async (prediction_id: string, status: string): Promise<any> => {
+    const res = await api.post("/uims/predictions/update-status", { prediction_id, status });
+    return res.data;
+};
+
+export const deletePrediction = async (prediction_id: string): Promise<void> => {
+    await api.delete(`/uims/predictions/${prediction_id}`);
+};
+
+export const clearPredictions = async (subject_id: string): Promise<void> => {
+    await api.delete(`/uims/predictions/clear/${subject_id}`);

@@ -21,7 +21,10 @@ import {
   getTimetable,
   addTimetableSlot,
   getMarks,
-  addMark
+  addMark,
+  generateAttendancePredictions,
+  getAttendancePredictions,
+  updatePredictionStatus
 } from "@/lib/api";
 import { 
   CheckCircle2, 
@@ -91,7 +94,8 @@ export default function Dashboard() {
   const [subjects, setSubjects] = useState<any[]>([]);
   const [timetable, setTimetable] = useState<any[]>([]);
   const [marks, setMarks] = useState<any[]>([]);
-  const [uimsSubTab, setUimsSubTab] = useState<"home" | "attendance" | "timetable" | "marks">("home");
+  const [predictions, setPredictions] = useState<any[]>([]);
+  const [uimsSubTab, setUimsSubTab] = useState<"home" | "attendance" | "timetable" | "marks" | "prediction">("home");
   const [activeTab, setActiveTab] = useState<Tab>("overview");
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [showAsgModal, setShowAsgModal] = useState(false);
@@ -230,6 +234,24 @@ export default function Dashboard() {
     } catch (err) {
       console.error("UIMS Add error:", err);
       throw err;
+    }
+  };
+
+  const loadPredictions = useCallback(async (subjectId: string) => {
+    try {
+      const preds = await getAttendancePredictions(subjectId);
+      setPredictions(preds);
+    } catch (err) {
+      console.error("Predictions load error:", err);
+    }
+  }, []);
+
+  const handleGeneratePredictions = async (subjectId: string) => {
+    try {
+      await generateAttendancePredictions(subjectId, 30);
+      await loadPredictions(subjectId);
+    } catch (err) {
+      console.error("Generate predictions error:", err);
     }
   };
 
@@ -393,7 +415,7 @@ export default function Dashboard() {
                     <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">Unified Institutional Management Simulator</p>
                   </div>
                   <div className="flex bg-gray-50 p-1 rounded-2xl border border-black/5 self-start md:self-auto overflow-x-auto no-scrollbar">
-                    {["home", "attendance", "timetable", "marks"].map((tab) => (
+                    {["home", "attendance", "timetable", "marks", "prediction"].map((tab) => (
                       <button
                         key={tab}
                         onClick={() => setUimsSubTab(tab as any)}
@@ -776,6 +798,109 @@ export default function Dashboard() {
                              </div>
                          ))}
                      </div>
+                  </div>
+               )}
+
+               {uimsSubTab === "prediction" && (
+                  <div className="space-y-6 animate-in fade-in duration-500">
+                     <div className="flex items-center justify-between">
+                        <div>
+                            <h3 className="text-sm font-black text-brand-textMain uppercase tracking-widest">Attendance Predictions</h3>
+                            <p className="text-[10px] text-gray-400 font-bold">AI-powered predictions based on timetable and attendance patterns</p>
+                        </div>
+                        {subjects.length > 0 && (
+                            <button 
+                                onClick={() => handleGeneratePredictions(subjects[0]?.id)}
+                                className="bg-brand-blue text-white px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-brand-blue/20 active:scale-95 transition-all"
+                            >
+                                <RefreshCcw className="w-4 h-4" /> Generate Predictions
+                            </button>
+                        )}
+                     </div>
+
+                     {subjects.length === 0 ? (
+                        <div className="card-polish rounded-[32px] p-12 bg-white border border-dashed border-gray-200 text-center space-y-4">
+                            <div className="w-12 h-12 rounded-2xl bg-gray-100 flex items-center justify-center text-gray-400 mx-auto">
+                                <Calendar className="w-6 h-6" />
+                            </div>
+                            <p className="text-sm font-black text-gray-400">No subjects added yet</p>
+                            <p className="text-[10px] text-gray-300">Add subjects and timetable to generate predictions</p>
+                        </div>
+                     ) : (
+                        <div className="space-y-6">
+                            {subjects.map(subject => {
+                                const subjectPredictions = predictions.filter(p => p.subject_id === subject.id);
+                                const attendance_percentage = subject.total_classes > 0 
+                                    ? (subject.attended_classes / subject.total_classes) * 100 
+                                    : 0;
+                                
+                                return (
+                                    <div key={subject.id} className="card-polish rounded-[32px] p-8 bg-white space-y-4">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <h4 className="text-lg font-black text-brand-textMain">{subject.name}</h4>
+                                                <p className="text-[10px] text-gray-400 font-bold">By {subject.faculty || "Prof"}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase">Current Attendance</p>
+                                                <p className="text-sm font-black text-brand-blue">{Math.round(attendance_percentage)}%</p>
+                                            </div>
+                                        </div>
+
+                                        {subjectPredictions.length === 0 ? (
+                                            <div className="border border-dashed border-gray-200 rounded-2xl py-8 text-center">
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No predictions generated</p>
+                                                <button 
+                                                    onClick={() => handleGeneratePredictions(subject.id)}
+                                                    className="mt-3 text-[9px] font-black text-brand-blue hover:text-brand-blue/70 uppercase"
+                                                >
+                                                    Generate for this subject →
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                                {subjectPredictions.slice(0, 9).map(pred => {
+                                                    const statusColors = {
+                                                        present: "bg-emerald-50 text-emerald-600 border-emerald-100",
+                                                        absent: "bg-rose-50 text-rose-600 border-rose-100",
+                                                        leave: "bg-amber-50 text-amber-600 border-amber-100"
+                                                    };
+                                                    const statusIcons = {
+                                                        present: "✓",
+                                                        absent: "✕",
+                                                        leave: "△"
+                                                    };
+
+                                                    return (
+                                                        <div key={pred.id} className={`rounded-2xl p-4 border-2 ${statusColors[pred.status as keyof typeof statusColors]} group cursor-pointer hover:scale-105 transition-transform`}>
+                                                            <div className="text-[10px] font-black uppercase tracking-tight mb-2 opacity-70">
+                                                                {new Date(pred.predicted_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                                            </div>
+                                                            <div className="text-[11px] font-bold mb-2">
+                                                                {pred.start_time} - {pred.end_time}
+                                                            </div>
+                                                            <div className="flex items-center justify-between">
+                                                                <span className="text-[10px] font-black uppercase">{pred.status}</span>
+                                                                <span className="text-lg font-black">{statusIcons[pred.status as keyof typeof statusIcons]}</span>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+
+                                        {subjectPredictions.length > 9 && (
+                                            <div className="text-center">
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase">
+                                                    +{subjectPredictions.length - 9} more predictions
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                     )}
                   </div>
                )}
             </div>
