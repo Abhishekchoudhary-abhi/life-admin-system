@@ -9,11 +9,6 @@ start "API Server" cmd /k "cd /d D:\Life-Admin\ai-life-admin && venv\Scripts\act
 
 timeout /t 4 /nobreak > nul
 
-echo Starting Telegram Bot...
-start "Telegram Bot" cmd /k "cd /d D:\Life-Admin\ai-life-admin && venv\Scripts\activate && python -m backend.telegram_bot"
-
-timeout /t 2 /nobreak > nul
-
 echo Starting Frontend...
 start "Frontend" cmd /k "cd /d D:\Life-Admin\ai-life-admin\frontend && npm run dev"
 
@@ -24,7 +19,6 @@ echo ================================
 echo.
 echo API Docs:   http://localhost:8000/docs
 echo Dashboard:  http://localhost:3000
-echo Telegram:   Open your bot and type /start
 echo.
 pause
 ```

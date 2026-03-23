@@ -1,7 +1,6 @@
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-import requests
 import os
 import json
 from datetime import datetime, timezone, timedelta
@@ -14,23 +13,12 @@ from sqlalchemy import select
 
 scheduler = BackgroundScheduler(timezone="Asia/Kolkata")  # IST
 
-def send_telegram_message(message: str):
-    token   = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
-    if not token or not chat_id:
-        return
-    try:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        requests.post(url, json={
-            "chat_id":    chat_id,
-            "text":       message,
-            "parse_mode": "Markdown"
-        }, timeout=10)
-    except Exception as e:
-        print(f"Telegram error: {e}")
+def send_notification(message: str):
+    # Telegram integration removed; keep function to avoid breaking existing flows.
+    print(f"Notification: {message}")
 
 def morning_briefing():
-    """AI-written personalised good-morning brief, sent to Telegram at 8 AM IST."""
+    """AI-written personalised good-morning brief."""
     print(f"[{datetime.now()}] Running AI morning briefing (DB mode)...")
     db = SessionLocal()
     try:
@@ -84,19 +72,19 @@ def morning_briefing():
 
         ai_result = llm.invoke([
             SystemMessage(content="""You are an enthusiastic personal productivity coach.
-Write a motivating, emoji-rich Telegram message for a student's morning briefing.
-Format for Telegram Markdown:
+Write a motivating, emoji-rich morning briefing message for a student's day.
+Format:
 - Start with greeting + today's date
 - Highlight urgent items clearly
 - Give 1-2 sentences of personalised motivation at the end
 - Max 25 lines total
 - Use *bold* for section headers
-Write the Telegram message directly — no preamble."""),
+Write the message directly — no preamble."""),
             HumanMessage(content=data)
         ])
 
         msg = ai_result.content.strip()
-        send_telegram_message(msg)
+        send_notification(msg)
         print("AI morning briefing sent")
 
     except Exception as e:
@@ -130,10 +118,10 @@ def evening_recap():
 
         ai_result = llm.invoke([
             SystemMessage(content="""You are an encouraging productivity coach.
-Write a short evening recap Telegram message. celebrate completed tasks. gently remind about remaining ones. restful note."""),
+Write a short evening recap message. celebrate completed tasks. gently remind about remaining ones. restful note."""),
             HumanMessage(content=f"Completed today:\n{done_lines}\n\nStill pending:\n{pending_lines}")
         ])
-        send_telegram_message(ai_result.content.strip())
+        send_notification(ai_result.content.strip())
         print("Evening recap sent")
     except Exception as e:
         print(f"Evening recap error: {e}")
@@ -157,11 +145,11 @@ def monitor_deadlines():
             hours_left = (due - now).total_seconds() / 3600
 
             if hours_left < 0:
-                send_telegram_message(f"🚨 *OVERDUE!* {a.course_code}: {a.title}")
+                send_notification(f"🚨 *OVERDUE!* {a.course_code}: {a.title}")
             elif hours_left <= 24:
-                send_telegram_message(f"⚠️ *Due in {int(hours_left)} hours!* {a.course_code}: {a.title}")
+                send_notification(f"⚠️ *Due in {int(hours_left)} hours!* {a.course_code}: {a.title}")
             elif hours_left <= 48:
-                send_telegram_message(f"📌 *Due Tomorrow!* {a.course_code}: {a.title}")
+                send_notification(f"📌 *Due Tomorrow!* {a.course_code}: {a.title}")
 
         print("Deadline check complete")
     except Exception as e:
@@ -178,27 +166,6 @@ def check_emails_job():
         print(f"Email job error: {e}")
 
 # ── Register all jobs ─────────────────────────────────────────────
-
-scheduler.add_job(
-    morning_briefing,
-    CronTrigger(hour=8, minute=0),
-    id="morning_briefing",
-    replace_existing=True
-)
-
-scheduler.add_job(
-    evening_recap,
-    CronTrigger(hour=21, minute=0),
-    id="evening_recap",
-    replace_existing=True
-)
-
-scheduler.add_job(
-    monitor_deadlines,
-    IntervalTrigger(hours=1),
-    id="deadline_monitor",
-    replace_existing=True
-)
 
 scheduler.add_job(
     check_emails_job,

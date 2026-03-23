@@ -1,27 +1,11 @@
-import os
 import sys
-import requests
 from datetime import datetime, timezone
 from backend.core.database import SessionLocal
 from backend.models.task import Task
 
-def send_telegram(message: str):
-    """Send a Telegram notification."""
-    token   = os.getenv("TELEGRAM_BOT_TOKEN", "")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID", "")
-    if not token or not chat_id:
-        print("Telegram not configured")
-        return
-    try:
-        url = f"https://api.telegram.org/bot{token}/sendMessage"
-        requests.post(url, json={
-            "chat_id":    chat_id,
-            "text":       message,
-            "parse_mode": "Markdown"
-        }, timeout=10)
-        print(f"Telegram sent: {message[:50]}")
-    except Exception as e:
-        print(f"Telegram error: {e}")
+def send_notification(message: str):
+    """Local notification sink after Telegram removal."""
+    print(f"Notification: {message[:120]}")
 
 def check_new_emails():
     """
@@ -74,11 +58,11 @@ def check_new_emails():
                     "source":   "email",
                 })
 
-        # Send Telegram alert for urgent emails
+        # Send alert for urgent emails
         for item in urgent_emails:
             email    = item["email"]
             analysis = item["analysis"]
-            send_telegram(
+            send_notification(
                 f"🚨 *Urgent Email!*\n\n"
                 f"From: {email['sender'][:50]}\n"
                 f"Subject: {email['subject'][:80]}\n\n"
@@ -114,7 +98,7 @@ def check_new_emails():
 
         # Send summary notification
         if urgent_emails or action_emails or tasks_created > 0:
-            send_telegram(
+            send_notification(
                 f"📧 *Email Check Complete*\n\n"
                 f"🚨 Urgent: {len(urgent_emails)}\n"
                 f"📋 Action required: {len(action_emails)}\n"
